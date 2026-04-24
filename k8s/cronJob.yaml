@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: rds-backup-cronjob
+spec:
+  schedule: "*/5 * * * *"   # every 5 min (testing)
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: backup
+            image: alpine:3.19
+            command: ["/bin/sh", "-c"]
+            args:
+              - |
+                apk add --no-cache mysql-client aws-cli gzip &&
+                DATE=$(date +%F-%H-%M) &&
+                FILE="backup-$DATE.sql.gz" &&
+                mysqldump -h $DB_HOST -u $DB_USER -p"$DB_PASSWORD" $DB_NAME | gzip > /tmp/$FILE &&
+                aws s3 cp /tmp/$FILE s3://rahul-rds-backup-bucket/ &&
+                echo "Backup uploaded: $FILE"
+            envFrom:
+              - secretRef:
+                  name: rds-secret
+              - secretRef:
+                  name: aws-secret
